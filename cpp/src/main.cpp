@@ -402,6 +402,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
     app.settings.on_hotkeys_suspend = [self](bool suspend) {
         self->hotkeys.Enable(self->msg_hwnd, !suspend);
     };
+    // 面板的 owner 设成消息窗口：这样面板既能不进任务栏 / Alt+Tab，
+    // 又不需要 WS_EX_TOOLWINDOW —— 那个样式会让 Win11 把关闭按钮一直画成红色悬停态
+    app.settings.SetOwner(app.msg_hwnd);
     app.settings.EnsureWindow();
 
     // --dump-controls：把面板每个控件的读数和 Collect() 的结果写成对照表就退出。

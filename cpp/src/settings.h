@@ -26,7 +26,9 @@ public:
 
     ~Settings();
 
-    // 创建（或复用）面板窗口，不显示
+    // 创建（或复用）面板窗口，不显示。
+    // 必须在第一次 EnsureWindow / Show 之前调 SetOwner，否则面板会跑到任务栏上。
+    void SetOwner(HWND owner) { parent_ = owner; }
     bool EnsureWindow();
     void Show(const Config& cfg);
     void Hide();
@@ -75,7 +77,7 @@ private:
     void CommitHotkeys();
 
     HWND hwnd_ = nullptr;
-    HWND parent_ = nullptr;
+    HWND parent_ = nullptr;   // 面板的 owner（消息窗口）。有 owner 才不用 WS_EX_TOOLWINDOW 也不上任务栏
     HFONT font_ = nullptr;
     HBRUSH brush_ = nullptr;   // 颜色预览色块
     COLORREF swatch_ = CLR_INVALID;

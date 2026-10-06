@@ -191,9 +191,15 @@ bool Settings::EnsureWindow() {
         if (x < mi.rcWork.left) x = mi.rcWork.left;
         if (y < mi.rcWork.top) y = mi.rcWork.top;
     }
-    hwnd_ = ::CreateWindowExW(WS_EX_TOOLWINDOW, wc.lpszClassName, L"ScreenWatermark 设置",
+    // 注意：这里刻意**不用** WS_EX_TOOLWINDOW。
+    // 本机实测：Win11 下「带 WS_EX_TOOLWINDOW + 窗口处于激活态」时，标题栏的关闭按钮
+    // 会被 DWM 一直画成悬停态（红底白叉），鼠标挪走也不消，试过 SWP_FRAMECHANGED、
+    // 挪窗口 1px、隐藏再显示、重新 SetForegroundWindow 都没用，只有去掉这个样式才正常。
+    // 面板不进任务栏 / Alt+Tab 的效果改由「指定 owner」实现：有 owner 的顶层窗口不会
+    // 单独出现在任务栏里，而 owner（消息窗口）本身是隐藏的，所以也看不到。
+    hwnd_ = ::CreateWindowExW(0, wc.lpszClassName, L"ScreenWatermark 设置",
                               WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX, x, y,
-                              win_w, win_h, nullptr, nullptr, inst, this);
+                              win_w, win_h, parent_, nullptr, inst, this);
     if (!hwnd_) {
         MessageBoxW(nullptr, L"设置窗口创建失败。", kAppName, MB_ICONERROR | MB_OK);
         return false;
