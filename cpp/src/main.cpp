@@ -113,6 +113,7 @@ static LRESULT CALLBACK MsgWndProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                     break;
                 }
                 case kCmdQuit: ::PostMessageW(h, kMsgQuit, 0, 0); break;
+                case kCmdAbout: OpenUrl(kRepoUrl); break;
                 default: break;
             }
             return 0;
@@ -402,6 +403,8 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
     app.settings.on_hotkeys_suspend = [self](bool suspend) {
         self->hotkeys.Enable(self->msg_hwnd, !suspend);
     };
+    // 面板右下角的「关于」：URL 只在 util 里定义一处，面板本身不认识链接
+    app.settings.on_about = []() { OpenUrl(kRepoUrl); };
     // 面板的 owner 设成消息窗口：这样面板既能不进任务栏 / Alt+Tab，
     // 又不需要 WS_EX_TOOLWINDOW —— 那个样式会让 Win11 把关闭按钮一直画成红色悬停态
     app.settings.SetOwner(app.msg_hwnd);

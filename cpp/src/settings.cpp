@@ -52,6 +52,7 @@ enum : int {
     IDC_HK_QUIT,
     IDC_HK_QUIT_REC,
     IDC_HK_STATUS,
+    IDC_ABOUT,
     IDC_TIMER_TICK = 2001,
     IDC_TIMER_RECORD = 2002,
 };
@@ -377,6 +378,16 @@ void Settings::BuildControls(HWND host) {
     y += px(22);
     S(IDC_STATUS, L"STATIC", L"", SS_LEFT | SS_ENDELLIPSIS, px(kMarginX), y, right - px(kMarginX),
       px(20));
+
+    // 17. 「关于」钉在右下角空白处，点了打开项目仓库。
+    // 位置相对客户区底边算，不跟着上面那串 y 走 —— 免得以后加行把它挤到看不见的地方
+    {
+        const wchar_t* about = L"关于 ScreenWatermark";
+        int aw = text_w(about) + px(26);
+        int ah = px(26);
+        S(IDC_ABOUT, L"BUTTON", about, BS_PUSHBUTTON, right - aw,
+          px(kClientH) - px(kMarginX) - ah, aw, ah);
+    }
 
     LoadFontList();
 }
@@ -910,6 +921,10 @@ LRESULT Settings::PanelProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 if (on_save) on_save(cfg_);
                 dirty_ = false;
                 ::SetDlgItemTextW(h, IDC_STATUS, L"配置已保存到 config.json");
+                return 0;
+            }
+            if (id == IDC_ABOUT && code == BN_CLICKED) {
+                if (on_about) on_about();
                 return 0;
             }
             if (id == IDC_RESET && code == BN_CLICKED) {

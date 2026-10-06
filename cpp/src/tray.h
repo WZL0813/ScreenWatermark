@@ -15,6 +15,7 @@ enum : UINT {
     kCmdReloadConfig = 40003,
     kCmdAutostart = 40004,
     kCmdQuit = 40005,
+    kCmdAbout = 40006,
 };
 
 class Tray {

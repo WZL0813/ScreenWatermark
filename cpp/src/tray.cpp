@@ -79,6 +79,9 @@ void Tray::ShowMenu(bool enabled, bool autostart) {
                   L"开机自启");
     ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
     ::AppendMenuW(menu, MF_STRING, kCmdQuit, L"退出");
+    // 「关于」放最后：点了用默认浏览器打开项目仓库
+    ::AppendMenuW(menu, MF_SEPARATOR, 0, nullptr);
+    ::AppendMenuW(menu, MF_STRING, kCmdAbout, L"关于 ScreenWatermark");
 
     POINT pt{};
     ::GetCursorPos(&pt);

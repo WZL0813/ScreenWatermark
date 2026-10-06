@@ -5,6 +5,7 @@
 #include <winsock2.h>
 
 #include <iphlpapi.h>
+#include <shellapi.h>   // ShellExecuteW（「关于」打开仓库用）
 #include <tlhelp32.h>
 
 #include <cstdio>
@@ -16,6 +17,7 @@ namespace sw {
 
 const wchar_t* const kAppName = L"ScreenWatermark";
 const wchar_t* const kAppVersion = L"1.0.0";
+const wchar_t* const kRepoUrl = L"https://github.com/WZL0813/ScreenWatermark";
 const wchar_t* const kMutexName = L"Local\\ScreenWatermark_SingleInstance_9F2C";
 const wchar_t* const kMsgWndClass = L"ScreenWatermarkMsgWnd";
 const wchar_t* const kOverlayWndClass = L"ScreenWatermarkOverlayWnd";
@@ -267,8 +269,7 @@ bool SetAutostart(bool on) {
     return ok;
 }
 
-int CountOtherInstances() {
-    // 只按「可执行文件名」比，不比全路径：用户完全可能把不同版本的 exe 拷到不同目录，
+int CountOtherInstances() {    // 只按「可执行文件名」比，不比全路径：用户完全可能把不同版本的 exe 拷到不同目录，
     // 那样比路径就漏了。四个实现的 exe 都叫 ScreenWatermark.exe，正好一网打尽。
     const DWORD me = ::GetCurrentProcessId();
     HANDLE snap = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -284,6 +285,13 @@ int CountOtherInstances() {
     }
     ::CloseHandle(snap);
     return others;
+}
+
+void OpenUrl(const std::wstring& url) {
+    // 交给 shell 用默认浏览器打开。返回值 >32 才算成功，失败只记日志不弹窗 ——
+    // 「关于」点不开不值得打断用户
+    HINSTANCE r = ::ShellExecuteW(nullptr, L"open", url.c_str(), nullptr, nullptr, SW_SHOWNORMAL);
+    if (reinterpret_cast<INT_PTR>(r) <= 32) DebugLog(L"打开链接失败(%p): %s", r, url.c_str());
 }
 
 std::wstring UserName() {

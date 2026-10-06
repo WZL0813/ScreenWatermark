@@ -23,6 +23,8 @@ public:
     std::function<void(const Config&)> on_hotkeys_changed;
     // 录制期间要整体挂起/恢复全局热键，否则用户按自己的热键会先把水印关了
     std::function<void(bool)> on_hotkeys_suspend;
+    // 点右下角「关于」→ 由 main 决定打开哪个链接（面板不认识 URL）
+    std::function<void()> on_about;
 
     ~Settings();
 

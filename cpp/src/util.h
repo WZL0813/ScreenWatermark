@@ -37,6 +37,8 @@ struct MonitorRect {
 // 程序版本号：--version 和托盘提示都用它
 extern const wchar_t* const kAppName;
 extern const wchar_t* const kAppVersion;
+// 项目仓库地址：托盘菜单和设置面板的「关于」都跳这里
+extern const wchar_t* const kRepoUrl;
 
 // 单实例互斥体名、消息窗口类名、overlay 窗口类名
 extern const wchar_t* const kMutexName;
@@ -81,6 +83,8 @@ RECT PrimaryMonitorRect();
 UINT DpiForWindowSafe(HWND hwnd);  // 拿不到就退 96，绝不让字号算成 0
 bool IsAutostartEnabled();
 bool SetAutostart(bool on);
+// 用系统默认浏览器打开一个 URL（托盘/面板的「关于」用）。失败只写日志，不弹窗
+void OpenUrl(const std::wstring& url);
 // 除自己以外，还有几个叫 ScreenWatermark.exe 的进程在跑。
 // 单实例互斥体只挡得住同一个版本；不同实现（Python/C#/Rust 的 exe 同名）各有各的
 // 锁，能同时跑，屏幕上就会叠出多层水印 —— 看着像渲染 bug，其实是两个程序。
