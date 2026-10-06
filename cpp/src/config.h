@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 
+#include "hotkey.h"
 #include "util.h"
 
 namespace sw {
@@ -31,8 +32,15 @@ struct Config {
     bool phase_offset = true;
     bool autostart = false;
 
+    // §2 的 hotkeys 对象：三个动作各一个组合字符串。
+    // 顺序固定为 开关水印 / 设置 / 退出，和 HotkeyAction 一致。
+    // 空串表示「这个快捷键不要」，不是错误；写法不合法的项由 ClampConfig 退回默认值
+    std::wstring hotkeys[3] = {L"Ctrl+Alt+W", L"Ctrl+Alt+S", L"Ctrl+Alt+Q"};
+
     // 非配置字段：坏文件提示，以及原样保留的未知字段（写回时带上，别吃掉别人新增的键）
     std::wstring load_warning;
+    // 哪一项 hotkeys 写法不合法（空表示都正常），由 main 决定打不打印
+    std::wstring hotkey_warning;
     std::vector<std::pair<std::wstring, std::wstring>> unknown_raw;
 };
 

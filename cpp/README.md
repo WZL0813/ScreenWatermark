@@ -37,28 +37,55 @@ cmake --build cpp/build-msvc --config Release
 ## 运行
 
 ```bat
-build\ScreenWatermark.exe                       :: 默认读同目录 config.json，没有就用默认值
-build\ScreenWatermark.exe --config D:\my.json   :: 指定配置文件
-build\ScreenWatermark.exe --version             :: 打印版本号
+build\ScreenWatermark.exe                                 :: 默认读同目录 config.json，没有就用默认值
+build\ScreenWatermark.exe --config D:\my.json             :: 指定配置文件
+build\ScreenWatermark.exe --version                       :: 打印版本号
+build\ScreenWatermark.exe --dump-controls 控件表.txt      :: 面板控件读数审计（排查控件不生效）
+build\ScreenWatermark.exe --dump-bitmap 帧.png            :: 每次应用后把渲染位图落盘（同上）
 ```
 
 `--version` 只有 `-mwindows` 的 GUI 子系统，标准输出在有些终端里看不到，可以从别的程序重定向捕获。
+`--dump-controls` 会把「控件原文 / Collect() 读到的值 / 目标字段」列成对照表，
+排查「改了某个控件点应用没反应」比读代码快得多；`--dump-bitmap` 则是把渲染链的最终位图落盘。
 
 ## 操作
 
 | 操作 | 行为 |
 | --- | --- |
-| `Ctrl+Alt+W` | 开 / 关水印显示 |
-| `Ctrl+Alt+S` | 开 / 关设置面板 |
-| `Ctrl+Alt+Q` | 退出 |
+| 全局快捷键（可改，见下） | 默认 `Ctrl+Alt+W` 开关水印、`Ctrl+Alt+S` 设置面板、`Ctrl+Alt+Q` 退出 |
 | 托盘图标 左键双击 | 开 / 关设置面板 |
 | 托盘图标 右键 | 显示/隐藏水印、设置…、重新载入配置、开机自启、退出 |
 
 **关掉设置面板不会退出程序**，水印继续挂着；退出只能走托盘菜单或快捷键。
 
 > 热键被别的程序占用时（`RegisterHotKey` 返回 false，系统错误码 1409），
-> 程序会退一级注册 `Ctrl+Alt+Shift+W` / `Ctrl+Alt+Shift+Q`，并把实际生效的组合写进
-> 设置面板底部的提示行；两个都抢不到时不影响其他功能，只是那个快捷键不可用。
+> 程序会退一级注册「加 Shift」的版本，并把实际生效的组合写进设置面板底部的提示行；
+> 降级版也抢不到时不影响其他功能，只是那个快捷键不可用（日志里有记录）。
+
+## 改快捷键
+
+快捷键存在 `config.json` 的 `hotkeys` 里，也可以在设置面板最下面三行直接改：
+
+```json
+"hotkeys": {
+  "toggle": "Ctrl+Alt+W",
+  "settings": "Ctrl+Alt+S",
+  "quit": "Ctrl+Alt+Q"
+}
+```
+
+- 写法大小写不敏感：`Ctrl`（也接受 `Control`）、`Alt`、`Shift`、`Win` 加主键，
+  主键支持 `A`-`Z`、`0`-`9`、`F1`-`F24`，例如 `"Ctrl+Shift+F9"`。
+- **写空串 `""` 就是不要这个快捷键**（不注册，不报错）。
+- 整段 `hotkeys` 删掉也能跑，三个动作自动用上面的默认值。
+- 某一项写歪了（比如 `"Foo+Bar"`）只影响那一项：它退回默认值，日志写明是哪一项、原文是什么，
+  另外两项照常工作。
+- 首选被占用时自动退到「加 Shift」版本（`Ctrl+Alt+W` → `Ctrl+Alt+Shift+W`）。
+
+**在面板里改**：最下面「全局快捷键」三行，左边输入框可以手敲组合，右边「录制」按钮点一下进入
+录制态（按钮变「按下组合…」），此时按下想要的组合即可；单独按修饰键不算，`Esc` 取消。
+录制期间会临时撤掉已注册的全局热键，所以按到自己的热键不会误触发；录制结束自动注册回去。
+改完或录完立刻重新注册，成功与否写在提示行上，「保存配置」才落盘。
 
 ## 目录结构
 

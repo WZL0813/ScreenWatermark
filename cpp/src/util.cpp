@@ -161,6 +161,15 @@ void DebugLog(const wchar_t* fmt, ...) {
     fclose(f);
 }
 
+void LogWarn(const std::wstring& msg) {
+    // stderr：只有从控制台启动时才看得到，但留着不吃亏
+    std::wstring line = msg;
+    if (line.empty() || line.back() != L'\n') line += L'\n';
+    fputws(line.c_str(), stderr);
+    // debug.log：程序是 GUI 子系统，stderr 常常是空的，所以同一句话再落一份文件
+    DebugLog(L"警告: %s", msg.c_str());
+}
+
 void EnsureDpiAwareness() {
     // manifest 已经把进程标成 PerMonitorV2。这里只在「还没被别人定过」时兜底补一刀：
     // 一旦进程已经是 aware，再调 SetProcessDPIAware / SetProcessDpiAwareness 会失败，

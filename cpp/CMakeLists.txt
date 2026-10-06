@@ -18,6 +18,7 @@ set(SRC
   src/tray.cpp
   src/settings.cpp
   src/util.cpp
+  src/hotkey.cpp
   res/app.rc
 )
 

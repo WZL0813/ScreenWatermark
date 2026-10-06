@@ -26,6 +26,10 @@ public:
     void InvalidateMonitors();
     // 退出时显式销毁所有水印窗
     void Shutdown();
+    // 诊断：把下一帧渲染出来的位图写到指定路径（PNG）。
+    // 给「改了某个控件屏幕却没变」这类问题用：位图是渲染链的最终产物，
+    // 比截屏干净得多（截屏还会被别的窗口和 z 序干扰）
+    void DumpNextFrameTo(const std::wstring& path) { dump_path_ = path; }
 
     const Config& config() const { return cfg_; }
     // main 每 3 秒要拿这些句柄去顶 TOPMOST
@@ -53,6 +57,8 @@ private:
     std::vector<Win> wins_;
     bool monitors_dirty_ = true;
     std::vector<MonitorRect> last_monitors_;
+    // 非空 = 下一帧渲染完就写到这个路径（诊断用，正常运行时是空的）
+    std::wstring dump_path_;
 };
 
 // overlay 窗口的窗口过程，main.cpp 注册窗口类时用

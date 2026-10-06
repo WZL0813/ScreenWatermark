@@ -56,7 +56,7 @@ rem -Wall -Wextra 开着，目标是零 warning。
   -finput-charset=UTF-8 -fexec-charset=UTF-8 ^
   -o "%BUILD%\ScreenWatermark.exe" ^
   "%ROOT%src\main.cpp" "%ROOT%src\config.cpp" "%ROOT%src\overlay.cpp" ^
-  "%ROOT%src\tray.cpp" "%ROOT%src\settings.cpp" "%ROOT%src\util.cpp" ^
+  "%ROOT%src\tray.cpp" "%ROOT%src\settings.cpp" "%ROOT%src\util.cpp" "%ROOT%src\hotkey.cpp" ^
   "%BUILD%\app.res" ^
   -lgdiplus -luser32 -lgdi32 -lshell32 -ladvapi32 -lole32 -lcomctl32 -lcomdlg32 -liphlpapi
 if errorlevel 1 (

@@ -63,6 +63,11 @@ bool CanWriteDir(const std::wstring& dir);
 // 设了 SW_DEBUG=1 才写日志（默认零开销、零垃圾文件）；出问题时用它定位
 // 注意：它内部会跑 DPI 检查，所以只能在 EnsureDpiAwareness 之后调
 void DebugLog(const wchar_t* fmt, ...);
+// 用户必须知道的警告：同时写 stderr 和 debug.log。
+// 为什么不能只写 stderr：本程序是 -mwindows 子系统，CRT 的 stderr 没关联任何
+// 文件/管道（实测重定向也拿不到内容），只写 stderr 等于把消息扔了。
+// debug.log 只在 SW_DEBUG=1 时写，所以消息文本里也写清「怎么打开日志」
+void LogWarn(const std::wstring& msg);
 // 尽早调一次，把进程标成 PerMonitorV2。manifest 里已经声明，这里是运行时兜底：
 // 实测有环境不认 manifest 的资源，结果 EnumDisplayMonitors 返回被 DPI 虚拟化过的尺寸
 // （屏幕 1440x960 却报 2520x1680），水印会被贴到窗外去

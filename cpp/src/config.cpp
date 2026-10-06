@@ -356,12 +356,34 @@ const wchar_t* const kKnownKeys[] = {
     L"text",       L"font_family",     L"font_size",  L"bold",        L"italic",
     L"color",      L"opacity",         L"angle",      L"gap_x",       L"gap_y",
     L"line_spacing", L"enabled",       L"click_through", L"template", L"time_format",
-    L"refresh_seconds", L"all_monitors", L"phase_offset", L"autostart"};
+    L"refresh_seconds", L"all_monitors", L"phase_offset", L"autostart", L"hotkeys"};
+
+// hotkeys 对象里的三个键名，顺序必须和 Config::hotkeys / HotkeyAction 一致
+const wchar_t* const kHotkeyKeys[3] = {L"toggle", L"settings", L"quit"};
 
 bool IsKnownKey(const std::wstring& k) {
     for (const wchar_t* s : kKnownKeys)
         if (k == s) return true;
     return false;
+}
+
+// 单个热键字段的读取：缺字段 → 用当前值（默认值）；
+// 写法不合法 → 只让这一项退回默认值，并把「哪一项、原文、原因」记进 warning，绝不整份回退
+std::wstring ReadHotkey(const JValue& hk, const wchar_t* key, const std::wstring& def,
+                        std::wstring* warning) {
+    const JValue* v = hk.find(key);
+    if (!v || v->type != JValue::Str) return def;
+    const std::wstring& raw = v->str;
+    HotkeySpec spec = ParseHotkey(raw);
+    if (!spec.valid) {
+        if (warning) {
+            *warning += L"config.json 的 hotkeys." + std::wstring(key) + L" = \"" + raw +
+                        L"\" 写法不合法（" + spec.error + L"），该项已退回默认值 " + def + L"。";
+        }
+        return def;
+    }
+    // 合法的空串保留成空串：那是「不要这个快捷键」
+    return spec.text;
 }
 
 }  // namespace
@@ -391,6 +413,16 @@ void ClampConfig(Config& c) {
     if (c.font_family.empty()) c.font_family = L"Microsoft YaHei";
     if (c.time_format.empty()) c.time_format = L"%Y-%m-%d %H:%M";
     if (c.color.size() != 7 || c.color[0] != L'#') c.color = L"#808080";
+
+    // 热键：面板手上可能塞进半截字符串，这里统一规范化；真不合法就退回该项默认值
+    const std::wstring defs[3] = {L"Ctrl+Alt+W", L"Ctrl+Alt+S", L"Ctrl+Alt+Q"};
+    for (int i = 0; i < 3; ++i) {
+        HotkeySpec spec = ParseHotkey(c.hotkeys[i]);
+        if (spec.valid)
+            c.hotkeys[i] = spec.text;  // 空串会被规范成空串，保持「不要这个键」
+        else
+            c.hotkeys[i] = defs[i];
+    }
 }
 
 std::wstring ConfigPath() {
@@ -472,6 +504,18 @@ Config LoadConfig(const std::wstring& path) {
     c.phase_offset = GetBool(o, L"phase_offset", c.phase_offset);
     c.autostart = GetBool(o, L"autostart", c.autostart);
 
+    // hotkeys：整段没有就三个默认值全上（老配置必须照常工作）；
+    // 有但类型不对，或者里面某一项写歪了，都只影响那一项
+    c.hotkey_warning.clear();
+    if (const JValue* hk = o.find(L"hotkeys")) {
+        if (hk->type != JValue::Obj) {
+            c.hotkey_warning = L"config.json 的 hotkeys 不是对象，三个快捷键都退回默认值。";
+        } else {
+            for (int i = 0; i < 3; ++i)
+                c.hotkeys[i] = ReadHotkey(*hk, kHotkeyKeys[i], c.hotkeys[i], &c.hotkey_warning);
+        }
+    }
+
     for (const auto& kv : o.obj)
         if (!IsKnownKey(kv.first)) c.unknown_raw.emplace_back(kv.first, SerializeValue(kv.second));
 
@@ -508,7 +552,19 @@ bool SaveConfig(const std::wstring& path, const Config& c) {
     kv(L"refresh_seconds", NumToStr(cc.refresh_seconds));
     kv(L"all_monitors", cc.all_monitors ? L"true" : L"false");
     kv(L"phase_offset", cc.phase_offset ? L"true" : L"false");
-    kv(L"autostart", cc.autostart ? L"true" : L"false", cc.unknown_raw.empty());
+    kv(L"autostart", cc.autostart ? L"true" : L"false");
+    // hotkeys 放在 autostart 后面、未知字段前面。整段由我们自己写，不参与 unknown_raw，
+    // 所以「未知字段保留」的逻辑不受影响
+    s += L"  \"hotkeys\": {\n";
+    for (int i = 0; i < 3; ++i) {
+        s += L"    \"";
+        s += kHotkeyKeys[i];
+        s += L"\": \"";
+        s += EscapeJson(cc.hotkeys[i]);
+        s += (i + 1 < 3) ? L"\",\n" : L"\"\n";
+    }
+    s += L"  }";
+    s += cc.unknown_raw.empty() ? L"\n" : L",\n";
     for (size_t i = 0; i < cc.unknown_raw.size(); ++i) {
         s += L"  \"" + EscapeJson(cc.unknown_raw[i].first) + L"\": " + cc.unknown_raw[i].second;
         s += (i + 1 == cc.unknown_raw.size()) ? L"\n" : L",\n";

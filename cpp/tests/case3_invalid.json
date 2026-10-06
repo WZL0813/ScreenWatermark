@@ -1,0 +1,26 @@
+{
+  "text": "\u5185\u90e8\u8d44\u6599 \u8bf7\u52ff\u5916\u4f20",
+  "font_family": "Microsoft YaHei",
+  "font_size": 30,
+  "bold": true,
+  "italic": false,
+  "color": "#808080",
+  "opacity": 0.15,
+  "angle": -30,
+  "gap_x": 150,
+  "gap_y": 120,
+  "line_spacing": 1.2,
+  "enabled": true,
+  "click_through": true,
+  "template": false,
+  "time_format": "%Y-%m-%d %H:%M",
+  "refresh_seconds": 30,
+  "all_monitors": true,
+  "phase_offset": true,
+  "autostart": false,
+  "hotkeys": {
+    "toggle": "Ctrl+Alt+F10",
+    "settings": "Foo+Bar",
+    "quit": "Ctrl+Alt+F11"
+  }
+}

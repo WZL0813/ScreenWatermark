@@ -19,6 +19,10 @@ public:
     std::function<void()> on_toggle;
     // 「保存配置」按钮
     std::function<void(const Config&)> on_save;
+    // 快捷键那三个输入框改了内容 → 交给 main 重新注册（注册必须在主窗口线程做）
+    std::function<void(const Config&)> on_hotkeys_changed;
+    // 录制期间要整体挂起/恢复全局热键，否则用户按自己的热键会先把水印关了
+    std::function<void(bool)> on_hotkeys_suspend;
 
     ~Settings();
 
@@ -33,12 +37,20 @@ public:
     HWND hwnd() const { return hwnd_; }
     // 快捷键组合被别的程序占用时会退级，底部的提示文字要跟着改
     void SetHintText(const std::wstring& text);
+    // 把配置里的三个组合填进输入框（main 决定填什么，面板不自己猜）
+    void SetHotkeyFields(const std::wstring (&keys)[3]);
+    // 注册结果/降级/失败原因，显示在提示行下面
+    void SetHotkeyStatus(const std::wstring& text);
     // 外部（重新载入配置）改了配置，把控件同步过来
     void SyncFrom(const Config& cfg);
     // 配置里字段被别处改动后，让面板知道自己不再脏
     void MarkClean() { dirty_ = false; }
 
     void NotifyConfigSaved();
+    // 诊断：把面板每个控件的读数和 Collect() 读出来的 Config 逐项对照，写进文件。
+    // 排查「改了某个控件点应用却没反应」时用，比盯着代码猜快得多。
+    // 依赖面板已创建，所以只在面板建好之后调；返回是否写成功
+    bool DumpControlAudit(const std::wstring& path, std::wstring* text_out);
 
 private:
     // 这三步故意分开：PanelProc 里的 static 回调需要访问私有成员
@@ -55,6 +67,12 @@ private:
     void LoadFontList();
     void ApplyDpiFont(UINT dpi);
     void UpdateColorPreview();
+    // 录制快捷键：START 进入录制态，Poll 每 30ms 读一次键盘状态
+    void StartRecording(int idx);
+    void StopRecording(bool apply);
+    void PollRecording();
+    // 把三个输入框的内容提交给 main（先解析，不合法的项退回默认值）
+    void CommitHotkeys();
 
     HWND hwnd_ = nullptr;
     HWND parent_ = nullptr;
@@ -65,6 +83,7 @@ private:
     bool dirty_ = false;
     bool suppress_ = false;  // 程序自己改控件时不要再回调，否则会自我循环
     UINT dpi_ = 96;
+    int recording_ = -1;     // 正在录制的输入框序号，-1 表示没在录
 };
 
 }  // namespace sw

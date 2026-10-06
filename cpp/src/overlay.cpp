@@ -265,6 +265,16 @@ void Overlay::RenderTo(const Win& w) {    const int w_px = w.rc.right - w.rc.lef
         ok = ::UpdateLayeredWindow(w.hwnd, screen, &dst, &size, memdc, &src, 0, &bf, ULW_ALPHA);
     }
     if (canvas) DumpBitmapIfAsked(*canvas, L"overlay-canvas.png");
+    // 诊断：把这一帧写到调用方指定的路径，写完清标志（一次请求写一帧）
+    if (canvas && !dump_path_.empty()) {
+        CLSID png{};
+        png = {0x557cf406, 0x1a04, 0x11d3, {0x9a, 0x73, 0x00, 0x00, 0xf8, 0x1e, 0xf3, 0x2e}};
+        Status st = canvas->Save(dump_path_.c_str(), &png, nullptr);
+        DebugLog(L"落帧 %s -> status=%d", dump_path_.c_str(), (int)st);
+        dump_path_.clear();
+    } else if (!canvas) {
+        DebugLog(L"落帧被跳过：canvas 为空（SW_GDI_DIB 模式？）");
+    }
     // UpdateLayeredWindow 失败的窗口会是一块全透明，日志里必须有痕迹
     if (!memdc || !ok)
         DebugLog(L"UpdateLayeredWindow 失败 ok=%d err=%lu（%dx%d）", ok ? 1 : 0, ::GetLastError(),

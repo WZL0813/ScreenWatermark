@@ -1,0 +1,22 @@
+{
+  "text": "OLD-CONFIG-NO-HOTKEYS",
+  "font_family": "SimSun",
+  "font_size": 44,
+  "bold": false,
+  "italic": true,
+  "color": "#3366CC",
+  "opacity": 0.5,
+  "angle": -12,
+  "gap_x": 200,
+  "gap_y": 90,
+  "line_spacing": 1.6,
+  "enabled": true,
+  "click_through": true,
+  "template": false,
+  "time_format": "%H:%M",
+  "refresh_seconds": 45,
+  "all_monitors": false,
+  "phase_offset": false,
+  "autostart": false,
+  "legacy_only_field": {"from": "old-config"}
+}
