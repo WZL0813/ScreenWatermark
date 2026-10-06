@@ -695,6 +695,10 @@ void Settings::SyncFrom(const Config& cfg) {
                           cfg.hotkeys[i].empty() ? kHotkeyPlaceholder : cfg.hotkeys[i].c_str());
     }
     UpdateColorPreview();
+    // 「隐藏水印」按钮上的字要跟着当前状态走：显示中 -> 「隐藏水印」，已隐藏 -> 「显示水印」。
+    // 之前这个按钮的文字是创建时写死的，点下去水印确实关了、字却不变；而托盘菜单是每次
+    // 弹菜单时按 cfg.enabled 现算的，所以只有托盘看着对。
+    ::SetDlgItemTextW(hwnd_, IDC_HIDE, cfg.enabled ? L"隐藏水印" : L"显示水印");
     suppress_ = false;
     dirty_ = false;
 }
