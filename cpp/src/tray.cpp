@@ -51,6 +51,23 @@ void Tray::SetTooltip(const std::wstring& text) {
     ::Shell_NotifyIconW(NIM_MODIFY, &nid);
 }
 
+void Tray::ShowBalloon(const std::wstring& title, const std::wstring& text) {
+    if (!added_) return;
+    NOTIFYICONDATAW nid{};
+    nid.cbSize = sizeof(nid);
+    nid.hWnd = owner_;
+    nid.uID = kTrayIconId;
+    nid.uFlags = NIF_INFO;
+    nid.dwInfoFlags = NIIF_WARNING;
+    nid.uTimeout = 10000;
+    // szInfoTitle 是 64 个字符、szInfo 是 256 个，超了会截断，这里按上限拷
+    wcsncpy(nid.szInfoTitle, title.c_str(), 63);
+    nid.szInfoTitle[63] = L'\0';
+    wcsncpy(nid.szInfo, text.c_str(), 255);
+    nid.szInfo[255] = L'\0';
+    ::Shell_NotifyIconW(NIM_MODIFY, &nid);
+}
+
 void Tray::ShowMenu(bool enabled, bool autostart) {
     HMENU menu = ::CreatePopupMenu();
     if (!menu) return;

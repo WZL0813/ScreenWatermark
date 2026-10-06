@@ -5,6 +5,7 @@
 #include <winsock2.h>
 
 #include <iphlpapi.h>
+#include <tlhelp32.h>
 
 #include <cstdio>
 #include <cstring>
@@ -264,6 +265,25 @@ bool SetAutostart(bool on) {
     }
     ::RegCloseKey(k);
     return ok;
+}
+
+int CountOtherInstances() {
+    // 只按「可执行文件名」比，不比全路径：用户完全可能把不同版本的 exe 拷到不同目录，
+    // 那样比路径就漏了。四个实现的 exe 都叫 ScreenWatermark.exe，正好一网打尽。
+    const DWORD me = ::GetCurrentProcessId();
+    HANDLE snap = ::CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return 0;
+    PROCESSENTRY32W pe{};
+    pe.dwSize = sizeof(pe);
+    int others = 0;
+    if (::Process32FirstW(snap, &pe)) {
+        do {
+            if (pe.th32ProcessID == me) continue;
+            if (::lstrcmpiW(pe.szExeFile, L"ScreenWatermark.exe") == 0) ++others;
+        } while (::Process32NextW(snap, &pe));
+    }
+    ::CloseHandle(snap);
+    return others;
 }
 
 std::wstring UserName() {

@@ -430,6 +430,19 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
     // 实际生效的组合写进日志和面板底部的提示行
     ApplyHotkeys(&app);
 
+    // 提醒多实例。单实例互斥体只挡得住同一个版本，另外三个实现的锁名不同、能同时跑，
+    // 于是屏幕上会叠出多层水印（本机实测复现过），用户很容易误以为是渲染坏了。
+    {
+        int others = CountOtherInstances();
+        if (others > 0) {
+            std::wstring msg = L"检测到还有 " + std::to_wstring(others) +
+                               L" 个 ScreenWatermark 在运行，屏幕上会叠出多层水印。"
+                               L"单实例锁只挡同一个版本，不同实现之间挡不住。";
+            LogWarn(msg);
+            if (app.tray_ok) app.tray.ShowBalloon(L"ScreenWatermark 有多个实例在跑", msg);
+        }
+    }
+
     ::SetTimer(app.msg_hwnd, kTimerTopmost, 3000, nullptr);
     // 只有模板里真的含 {time} 才需要定时重绘，否则静置时一个像素都不重画
     if (app.cfg.templ && TemplateHasTime(app.cfg.text))

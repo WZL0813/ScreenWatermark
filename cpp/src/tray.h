@@ -25,6 +25,8 @@ public:
     bool Add(HWND owner);
     void Remove();
     void SetTooltip(const std::wstring& text);
+    // 托盘气泡提醒（比如"检测到还有别的实例在跑"）。托盘没加成功时静默忽略
+    void ShowBalloon(const std::wstring& title, const std::wstring& text);
     // 在鼠标位置弹菜单；弹出前必须先 SetForegroundWindow，否则菜单点了不消失
     void ShowMenu(bool enabled, bool autostart);
 

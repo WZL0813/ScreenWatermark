@@ -81,6 +81,10 @@ RECT PrimaryMonitorRect();
 UINT DpiForWindowSafe(HWND hwnd);  // 拿不到就退 96，绝不让字号算成 0
 bool IsAutostartEnabled();
 bool SetAutostart(bool on);
+// 除自己以外，还有几个叫 ScreenWatermark.exe 的进程在跑。
+// 单实例互斥体只挡得住同一个版本；不同实现（Python/C#/Rust 的 exe 同名）各有各的
+// 锁，能同时跑，屏幕上就会叠出多层水印 —— 看着像渲染 bug，其实是两个程序。
+int CountOtherInstances();
 
 // ---- 模板变量 ----
 std::wstring UserName();
