@@ -1,0 +1,11 @@
+// Rust 版资源：图标 + DPI manifest + Common Controls v6。
+// 用 windres 编成 COFF 目标文件，再由 cargo rustc 通过 -C link-arg 塞给链接器。
+
+#include <winuser.h>
+
+// 图标 ID 固定为 1：LoadImageW 里按 MAKEINTRESOURCE(1) 取，别改。
+1 ICON "app.ico"
+
+// DPI：PerMonitorV2 才能在多屏不同缩放时拿到真实物理像素。
+// Common Controls v6：TRACKBAR / COMBOBOX 等高版本控件外观相关。
+1 24 "app.manifest"

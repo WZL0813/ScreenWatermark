@@ -1,0 +1,21 @@
+[package]
+# 名字固定成 ScreenWatermark：cargo 直接用这个名字做产物文件名，
+# 这样 build.bat / README 里的路径和 C++/C# 版保持一致。
+name = "ScreenWatermark"
+version = "1.0.0"
+edition = "2021"
+build = "build.rs"
+description = "Windows 屏幕水印工具（Rust / 零第三方 crate）"
+
+# 刻意留空：全部 FFI 与 JSON 手写，不连 crates.io，编译快、exe 小。
+[dependencies]
+
+[profile.release]
+lto = true
+strip = true
+panic = "abort"
+opt-level = 3
+
+# 调试构建也关掉溢出检查带来的额外体积影响不大，但保留默认即可。
+[profile.dev]
+opt-level = 1

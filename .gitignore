@@ -1,0 +1,44 @@
+# ---- 构建产物 ----
+# C++ 是唯一在维护的实现，产物路径写死；
+# 三个冻结版统一挪进了 legacy/，路径跟着改。
+cpp/build/
+cpp/out/
+legacy/python/build/
+legacy/python/dist/
+legacy/python/*.spec
+legacy/csharp/build/
+legacy/csharp/obj/
+legacy/csharp/bin/
+legacy/csharp/*.user
+legacy/rust/target/
+*.exe
+*.obj
+*.o
+*.res
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# ---- 运行期生成 ----
+config.json
+config.bad.json
+run-status.json
+*.log
+!LICENSE
+
+# 自测用的全屏截图会带上真实桌面，不进版本库
+docs/shots/*-verify.png
+
+# ---- 编辑器 / 系统 ----
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+*.swp
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+.venv/
+venv/

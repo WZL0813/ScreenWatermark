@@ -1,0 +1,10 @@
+// app.rc —— 图标 + manifest（PerMonitorV2 DPI 感知、Common Controls v6）。
+// windres 与 MSVC rc 都能吃这份；图标用数字 ID 1，代码里 MAKEINTRESOURCEW(1) 取。
+
+#include <windows.h>
+
+// 1 = 应用图标（IDI_APPICON）
+1 ICON "app.ico"
+
+// 1 = CREATEPROCESS_MANIFEST_RESOURCE_ID, 24 = RT_MANIFEST
+1 24 "app.manifest"
