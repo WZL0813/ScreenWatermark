@@ -22,6 +22,10 @@ struct Config {
     int angle = -30;                  // -90..90，逆时针为正
     int gap_x = 150;                  // 0..2000
     int gap_y = 120;                  // 0..2000
+    // 每屏强制平铺的行列数；0 = 自动（按 gap_x / gap_y 算），老配置不受影响。
+    // >0 时：cell_w = 屏宽 / cols、cell_h = 屏高 / rows，正好画 cols 列 rows 行
+    int cols = 0;                     // 0..200
+    int rows = 0;                     // 0..200
     double line_spacing = 1.2;        // 0.5..3.0
     bool enabled = true;
     bool click_through = true;

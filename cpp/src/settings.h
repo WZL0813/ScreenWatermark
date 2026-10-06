@@ -62,6 +62,8 @@ private:
     LRESULT PanelProc(HWND, UINT, WPARAM, LPARAM);
 
     void BuildControls(HWND host);
+    // 布局自检：控件被裁到面板外或互相压住就写警告日志（加行时忘了加高度会立刻暴露）
+    void CheckLayout();
     void Collect(Config& out) const;
     int  ReadInt(int id, int def, int lo, int hi) const;
     double ReadDouble(int id, double def, double lo, double hi) const;

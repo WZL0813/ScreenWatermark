@@ -377,6 +377,13 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int) {
     if (!app.frame_dump_path.empty()) app.overlay.DumpNextFrameTo(app.frame_dump_path);
 
     app.overlay.Apply(app.cfg);
+    // 初始帧落盘：Apply 之后再请求一次并直接重画，保证第一帧一定写出来。
+    // 只靠 Apply 之前设的那个标志会漏（实测 Apply 内部那一次没走到落盘分支）
+    if (!app.frame_dump_path.empty()) {
+        DebugLog(L"初始帧落盘 -> %s", app.frame_dump_path.c_str());
+        app.overlay.DumpNextFrameTo(app.frame_dump_path);
+        app.overlay.Refresh();
+    }
 
     app.tray_ok = app.tray.Add(app.msg_hwnd);
     if (!app.tray_ok) LogWarn(L"托盘图标添加失败，只能用快捷键和设置面板控制。");

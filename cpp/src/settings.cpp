@@ -52,14 +52,17 @@ enum : int {
     IDC_HK_QUIT,
     IDC_HK_QUIT_REC,
     IDC_HK_STATUS,
+    IDC_COLS,
+    IDC_ROWS,
     IDC_ABOUT,
     IDC_TIMER_TICK = 2001,
     IDC_TIMER_RECORD = 2002,
 };
 
-// 面板固定尺寸，坐标按 96 DPI 设计，运行时按 dpi/96 缩放
+// 面板固定尺寸，坐标按 96 DPI 设计，运行时按 dpi/96 缩放。
+// 每加一行控件都要同步加高度，否则底部那几行会被裁掉（之前吃过这个亏）
 const int kClientW = 520;
-const int kClientH = 630;
+const int kClientH = 664;
 const int kMarginX = 14;
 const int kEditH = 24;
 const int kRowH = 30;
@@ -125,7 +128,7 @@ bool SameRenderConfig(const Config& a, const Config& b) {
     return a.text == b.text && a.font_family == b.font_family && a.font_size == b.font_size &&
            a.bold == b.bold && a.italic == b.italic && a.color == b.color &&
            std::fabs(a.opacity - b.opacity) < 1e-6 && a.angle == b.angle &&
-           a.gap_x == b.gap_x && a.gap_y == b.gap_y &&
+           a.gap_x == b.gap_x && a.gap_y == b.gap_y && a.cols == b.cols && a.rows == b.rows &&
            std::fabs(a.line_spacing - b.line_spacing) < 1e-6 && a.enabled == b.enabled &&
            a.click_through == b.click_through && a.templ == b.templ &&
            a.time_format == b.time_format && a.refresh_seconds == b.refresh_seconds &&
@@ -307,6 +310,20 @@ void Settings::BuildControls(HWND host) {
     }
     y += step;
 
+    // 5b. 每行 / 每列个数（0 = 自动，按 gap_x / gap_y 平铺）。
+    // 放在间距那一行下面单独一行：两个长标签挤在同一行会很挤，宁可加高面板
+    {
+        int num_w = px(64);
+        S(0, L"STATIC", L"每行个数", SS_LEFT, px(kMarginX), y + px(5), label_w, px(18));
+        S(IDC_COLS, L"EDIT", L"0", ES_NUMBER | ES_RIGHT | WS_BORDER, col2, y, num_w, eh);
+        int l2 = col2 + num_w + px(14);
+        S(0, L"STATIC", L"每列个数", SS_LEFT, l2, y + px(5), label_w, px(18));
+        S(IDC_ROWS, L"EDIT", L"0", ES_NUMBER | ES_RIGHT | WS_BORDER, l2 + label_w, y, num_w, eh);
+        S(0, L"STATIC", L"0 = 自动（用上面的间距）", SS_LEFT, l2 + label_w + num_w + px(14),
+          y + px(5), right - (l2 + label_w + num_w + px(14)), px(18));
+    }
+    y += step;
+
     // 6. 文字颜色
     S(0, L"STATIC", L"文字颜色", SS_LEFT, px(kMarginX), y + px(5), label_w, px(18));
     S(IDC_COLOR_PREVIEW, L"STATIC", L"", SS_LEFT | SS_SUNKEN, col2, y + px(3), px(40), px(18));
@@ -390,6 +407,74 @@ void Settings::BuildControls(HWND host) {
     }
 
     LoadFontList();
+    CheckLayout();
+}
+
+// 布局自检：控件被裁到面板外、或者两个控件互相压住，都属于「加行时忘了加高度」这类事故。
+// 用实测的窗口矩形查，别用代码里那串 y 变量猜。发现问题写警告日志（SW_DEBUG=1 时可见）
+void Settings::CheckLayout() {
+    if (!hwnd_) return;
+    RECT cr{};
+    ::GetClientRect(hwnd_, &cr);
+    const int cw = cr.right - cr.left;
+    const int ch = cr.bottom - cr.top;
+
+    struct Box {
+        HWND h;
+        RECT r;
+        int id;
+        std::wstring cls;
+    };
+    std::vector<Box> boxes;
+    for (HWND c = ::GetWindow(hwnd_, GW_CHILD); c; c = ::GetWindow(c, GW_HWNDNEXT)) {
+        RECT r{};
+        if (!::GetWindowRect(c, &r)) continue;
+        // 转成客户区坐标
+        POINT tl{r.left, r.top};
+        ::ScreenToClient(hwnd_, &tl);
+        Box b;
+        b.h = c;
+        b.id = (int)::GetWindowLongPtrW(c, GWLP_ID);
+        b.r = {tl.x, tl.y, tl.x + (r.right - r.left), tl.y + (r.bottom - r.top)};
+        wchar_t cls[64] = {0};
+        ::GetClassNameW(c, cls, 64);
+        b.cls = cls;
+        boxes.push_back(b);
+    }
+
+    int clipped = 0;
+    int overlapping = 0;
+    std::wstring detail;
+    for (const Box& b : boxes) {
+        if (b.r.left < 0 || b.r.top < 0 || b.r.right > cw || b.r.bottom > ch) {
+            ++clipped;
+            detail += Fmt(L"  裁切: id=%d %s (%ld,%ld)-(%ld,%ld) 客户区 %dx%d\r\n", b.id,
+                          b.cls.c_str(), b.r.left, b.r.top, b.r.right, b.r.bottom, cw, ch);
+        }
+    }
+    // 重叠：只关心两个都可见、且类型相同的普通控件；下拉框本体和它自己的子控件不算
+    for (size_t i = 0; i < boxes.size(); ++i) {
+        for (size_t j = i + 1; j < boxes.size(); ++j) {
+            const Box& a = boxes[i];
+            const Box& b = boxes[j];
+            if (!::IsWindowVisible(a.h) || !::IsWindowVisible(b.h)) continue;
+            RECT inter{};
+            if (!::IntersectRect(&inter, &a.r, &b.r)) continue;
+            if (inter.right <= inter.left || inter.bottom <= inter.top) continue;
+            ++overlapping;
+            detail += Fmt(L"  重叠: id=%d %s 与 id=%d %s\r\n", a.id, a.cls.c_str(), b.id,
+                          b.cls.c_str());
+        }
+    }
+    const wchar_t* verdict = (clipped == 0 && overlapping == 0) ? L"OK" : L"有问题";
+    std::wstring line = Fmt(L"面板布局自检: %s 控件 %zu 个 clipped=%d overlapping=%d 客户区 %dx%d",
+                            verdict, boxes.size(), clipped, overlapping, cw, ch);
+    DebugLog(L"%s", line.c_str());
+    if (clipped || overlapping) {
+        LogWarn(line);
+        // 明细只进 debug.log，别刷屏
+        DebugLog(L"布局问题明细:\r\n%s", detail.c_str());
+    }
 }
 
 void Settings::LoadFontList() {
@@ -449,6 +534,8 @@ void Settings::Collect(Config& out) const {
     out.font_size = ReadInt(IDC_FONTSIZE, cfg_.font_size, 8, 400);
     out.gap_x = ReadInt(IDC_GAPX, cfg_.gap_x, 0, 2000);
     out.gap_y = ReadInt(IDC_GAPY, cfg_.gap_y, 0, 2000);
+    out.cols = ReadInt(IDC_COLS, cfg_.cols, 0, 200);
+    out.rows = ReadInt(IDC_ROWS, cfg_.rows, 0, 200);
     out.line_spacing = ReadDouble(IDC_LINESPACING, cfg_.line_spacing, 0.5, 3.0);
     out.bold = ReadCheck(IDC_BOLD);
     out.italic = ReadCheck(IDC_ITALIC);
@@ -510,6 +597,8 @@ void Settings::SyncFrom(const Config& cfg) {
     SetIntText(IDC_FONTSIZE, cfg.font_size);
     SetIntText(IDC_GAPX, cfg.gap_x);
     SetIntText(IDC_GAPY, cfg.gap_y);
+    SetIntText(IDC_COLS, cfg.cols);
+    SetIntText(IDC_ROWS, cfg.rows);
     ::SetDlgItemTextW(hwnd_, IDC_TIMEFMT, cfg.time_format.c_str());
     ::SendMessageW(DlgItem(hwnd_, IDC_BOLD), BM_SETCHECK, cfg.bold ? BST_CHECKED : BST_UNCHECKED, 0);
     ::SendMessageW(DlgItem(hwnd_, IDC_ITALIC), BM_SETCHECK, cfg.italic ? BST_CHECKED : BST_UNCHECKED,
@@ -712,6 +801,8 @@ bool Settings::DumpControlAudit(const std::wstring& path, std::wstring* text_out
         {IDC_ANGLE, L"旋转角度(滑块)", L"angle"},
         {IDC_GAPX, L"水平间距", L"gap_x"},
         {IDC_GAPY, L"垂直间距", L"gap_y"},
+        {IDC_COLS, L"每行个数(0=自动)", L"cols"},
+        {IDC_ROWS, L"每列个数(0=自动)", L"rows"},
         {IDC_LINESPACING, L"行距倍数", L"line_spacing"},
         {IDC_COLOR_PREVIEW, L"颜色色块", L"color"},
         {IDC_TEMPLATE, L"启用模板变量", L"template"},
@@ -756,6 +847,8 @@ bool Settings::DumpControlAudit(const std::wstring& path, std::wstring* text_out
         else if (r.id == IDC_ANGLE) val = std::to_wstring(got.angle);
         else if (r.id == IDC_GAPX) val = std::to_wstring(got.gap_x);
         else if (r.id == IDC_GAPY) val = std::to_wstring(got.gap_y);
+        else if (r.id == IDC_COLS) val = std::to_wstring(got.cols);
+        else if (r.id == IDC_ROWS) val = std::to_wstring(got.rows);
         else if (r.id == IDC_LINESPACING) val = Fmt(L"%.2f", got.line_spacing);
         else if (r.id == IDC_COLOR_PREVIEW) val = got.color;
         else if (r.id == IDC_TEMPLATE) val = got.templ ? L"true" : L"false";
@@ -940,6 +1033,14 @@ LRESULT Settings::PanelProc(HWND h, UINT m, WPARAM w, LPARAM l) {
             }
             if (id == IDC_TEXT && code == EN_CHANGE) {
                 if (!suppress_) ::SetDlgItemTextW(h, IDC_STATUS, L"未保存");
+                return 0;
+            }
+            // 每行/每列个数：改了要把「0 = 自动」这类说明一并刷新，用户才知道当前是哪种模式
+            if ((id == IDC_COLS || id == IDC_ROWS) && code == EN_CHANGE) {
+                if (!suppress_) {
+                    ::SetDlgItemTextW(h, IDC_STATUS,
+                                      L"未保存（每行/每列 0 = 自动，用水平/垂直间距）");
+                }
                 return 0;
             }
             return 0;

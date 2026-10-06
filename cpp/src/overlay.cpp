@@ -131,37 +131,160 @@ void Overlay::RenderCells(Graphics& g, Font& font, int w_px, int h_px, const std
 
     const REAL text_w = bounds.Width;
     const REAL font_px = (REAL)font.GetHeight(&g);
-    const REAL cell_w = text_w + (REAL)cfg_.gap_x;
-    const REAL cell_h = font_px * (REAL)cfg_.line_spacing + (REAL)cfg_.gap_y;
-    if (text_w <= 0.5f || cell_w <= 1.0f || cell_h <= 1.0f) return;
 
-    // 旋转会把文字甩出单元范围，四周留一个对角线长度的余量，否则四边会出现空白带
-    int pad = (int)std::ceil(std::sqrt((double)(text_w * text_w + font_px * font_px))) +
-              cfg_.gap_x + cfg_.gap_y + 2;
+    // 两种平铺模式：
+    //   自动（cols/rows 为 0）：单元尺寸由文字 + gap 决定，向四周各多铺一格补旋转后的四角
+    //   强制（cols/rows > 0）：单元尺寸 = 屏尺寸 / 行列数，从原点起正好画 cols 列 rows 行，
+    //                        不向外扩（用户要的就是「每行几个、每列几个」）
+    // 两个方向可以混用（比如只强制列数、行数仍自动）
+    const bool force_cols = cfg_.cols > 0;
+    const bool force_rows = cfg_.rows > 0;
+
+    REAL cell_w = text_w + (REAL)cfg_.gap_x;
+    REAL cell_h = font_px * (REAL)cfg_.line_spacing + (REAL)cfg_.gap_y;
+    if (force_cols) cell_w = (REAL)w_px / (REAL)cfg_.cols;
+    if (force_rows) cell_h = (REAL)h_px / (REAL)cfg_.rows;
+    // 兜底：单元尺寸退化到不足 1 像素就没法平铺了，直接跳过这一帧（也防死循环）
+    if (text_w <= 0.5f || cell_w < 1.0f || cell_h < 1.0f) return;
+
+    const REAL ang = (REAL)(-cfg_.angle);  // 规格说逆时针为正，GDI+ 正角度是顺时针
+
+    // 文字是绕单元左上角旋转的，旋转后它会跑出单元矩形：
+    //   ox = 向右最远能到多少（相对单元左上角），oy = 向下最远能到多少
+    // 用它来决定「整体要挪多少」和「可用空间要扣掉多少」。
+    // 漏了这一步，angle<0 时第一行会被甩到 y<0 直接切掉（主人用的就是 -30，必现）
+    const REAL rad = ang * 3.14159265358979f / 180.0f;
+    const REAL cs = (REAL)std::cos((double)rad);
+    const REAL sn = (REAL)std::sin((double)rad);
+    REAL x_min = 0.0f, x_max = 0.0f, y_min = 0.0f, y_max = 0.0f;
+    for (int ix = 0; ix < 2; ++ix) {
+        for (int iy = 0; iy < 2; ++iy) {
+            const REAL px_ = (ix ? text_w : 0.0f);
+            const REAL py_ = (iy ? font_px : 0.0f);
+            const REAL tx = px_ * cs - py_ * sn;
+            const REAL ty = px_ * sn + py_ * cs;
+            if (ix == 0 && iy == 0) {
+                x_min = x_max = tx;
+                y_min = y_max = ty;
+            } else {
+                if (tx < x_min) x_min = tx;
+                if (tx > x_max) x_max = tx;
+                if (ty < y_min) y_min = ty;
+                if (ty > y_max) y_max = ty;
+            }
+        }
+    }
+    const REAL left_ov = -x_min;    // >0 表示文字会往左探出单元
+    const REAL right_ov = x_max;    // >0 表示文字会往右探出单元
+    const REAL top_ov = -y_min;     // >0 表示文字会往上探出单元（负角度就是这种）
+    const REAL bottom_ov = y_max;   // >0 表示文字会往下探出单元
+    const REAL kEdgePad = 3.0f;     // 抗锯齿的边缘留一点点余量
+
+    // 强制的那一维：平分整幅画布，格子数才严格等于 cols/rows。
+    // 注意不要用「可用宽度 / cols」——那样格子变小、最后一列的起点被推到画布外，
+    // 循环会提前 break，实测 4 列只剩 3 列。旋转造成的溢出留给下面的文字盒夹取处理
+    if (force_cols) cell_w = (REAL)w_px / (REAL)cfg_.cols;
+    if (force_rows) cell_h = (REAL)h_px / (REAL)cfg_.rows;
+    if (cell_w < 1.0f || cell_h < 1.0f) return;
+
+    // 旋转会把文字甩出单元范围，四周留一个对角线长度的余量，否则四边会出现空白带。
+    // 只给「自动的那一维」加，且强制维度为 0，这样自动模式算出来和以前一模一样
+    int pad;
+    {
+        REAL need = (REAL)std::ceil(std::sqrt((double)(text_w * text_w + font_px * font_px))) + 2.0f;
+        if (!force_cols) need += (REAL)cfg_.gap_x;
+        if (!force_rows) need += (REAL)cfg_.gap_y;
+        pad = (int)need;
+    }
     if (pad > 4000) pad = 4000;
 
-    const int nx = (int)std::ceil((w_px + 2.0 * cell_w) / cell_w) + 1;
-    const int ny = (int)std::ceil((h_px + 2.0 * cell_h) / cell_h) + 1;
+    // 起止位置和单元数：强制模式从画布原点铺到画布末端（正好 cols/rows 个），
+    // 自动模式两端各多铺一格来补旋转后的四角
+    REAL x0, y0, x1, y1;
+    if (force_cols) {
+        x0 = 0.0f;
+        x1 = (REAL)w_px;
+    } else {
+        x0 = -(REAL)pad - cell_w;
+        x1 = (REAL)w_px + cell_w;
+    }
+    if (force_rows) {
+        y0 = 0.0f;
+        y1 = (REAL)h_px;
+    } else {
+        y0 = -(REAL)pad - cell_h;
+        y1 = (REAL)h_px + cell_h;
+    }
+
+    const int nx = force_cols ? cfg_.cols : (int)std::ceil((x1 - x0) / cell_w) + 1;
+    const int ny = force_rows ? cfg_.rows : (int)std::ceil((y1 - y0) / cell_h) + 1;
     long long total = (long long)nx * (long long)ny;
     int step = 1;
     while (total / ((long long)step * step) > kMaxCells) ++step;  // 太密就隔行隔列抽稀
 
-    const REAL ang = (REAL)(-cfg_.angle);  // 规格说逆时针为正，GDI+ 正角度是顺时针
-    int row = 0;
-    for (REAL y = -(REAL)pad - cell_h; y < (REAL)h_px + cell_h; y += cell_h, ++row) {
-        if (step > 1 && (row % step) != 0) continue;
-        REAL rowx = -cell_w;
-        if (cfg_.phase_offset && (row & 1)) rowx += cell_w * 0.5f;  // 奇数行错开半格
-        int col = 0;
-        for (REAL x = rowx; x < (REAL)w_px + cell_w; x += cell_w, ++col) {
-            if (step > 1 && (col % step) != 0) continue;
+    // 把这一帧的网格参数记下来：验证「正好 cols 列 rows 行」时靠它，比数截图靠谱
+    DebugLog(L"网格: 模式=%s%s cell=%.2fx%.2f 列=%d 行=%d 单元总数=%lld 抽稀step=%d "
+             L"文字宽=%.1f 字号像素=%.1f pad=%d 外延(左%.1f 右%.1f 上%.1f 下%.1f) 起点=%.1f,%.1f",
+             force_cols ? L"强制列" : L"自动列", force_rows ? L"+强制行" : L"+自动行", cell_w,
+             cell_h, nx, ny, total, step, text_w, font_px, pad, left_ov, right_ov, top_ov,
+             bottom_ov, x0, y0);
+
+    // 用整数计数 + 乘法定位，而不是浮点累加：累加在极端单元尺寸下会有舍入漂移，
+    // 强制模式下就画不出「正好 cols 列 rows 行」了
+    long long drawn = 0;
+    long long clipped = 0;
+    for (int iy = 0; iy < ny; ++iy) {
+        if (step > 1 && (iy % step) != 0) continue;
+        const REAL y = y0 + (REAL)iy * cell_h;
+        if (y >= y1 - 0.5f) break;
+        REAL rowx = x0;
+        if (cfg_.phase_offset && (iy & 1)) rowx += cell_w * 0.5f;  // 奇数行错开半格
+        for (int ix = 0; ix < nx; ++ix) {
+            if (step > 1 && (ix % step) != 0) continue;
+            const REAL x = rowx + (REAL)ix * cell_w;
+            if (x >= x1 - 0.5f) break;
+            // 这一格文字盒左上角的最终位置：强制维度上把它夹进画布内。
+            // 旋转会让文字盒比格子宽/高（大角度时宽很多），不做夹取就会被切掉；
+            // 夹取只在盒子放得下时进行，放不下就交给下面的保险跳过
+            REAL tx2 = x + (pad ? 0.0f : kEdgePad);
+            REAL ty2 = y + (pad ? 0.0f : kEdgePad);
+            if (force_cols && x_max - x_min <= (REAL)w_px) {
+                if (tx2 + x_min < kEdgePad) tx2 = kEdgePad - x_min;
+                if (tx2 + x_max > (REAL)w_px - kEdgePad) tx2 = (REAL)w_px - kEdgePad - x_max;
+            }
+            if (force_rows && y_max - y_min <= (REAL)h_px) {
+                if (ty2 + y_min < kEdgePad) ty2 = kEdgePad - y_min;
+                if (ty2 + y_max > (REAL)h_px - kEdgePad) ty2 = (REAL)h_px - kEdgePad - y_max;
+            }
+            // 最后一道保险。只对「强制的那一维」生效：
+            // 自动模式本来就会向屏幕外多铺一圈（那是补旋转四角的正常手法），
+            // 对它做越界检查会把正常单元误杀（实测过：126 个单元被砍掉 87 个）
+            const REAL bx0 = tx2 + x_min, bx1 = tx2 + x_max;
+            const REAL by0 = ty2 + y_min, by1 = ty2 + y_max;
+            bool oob = false;
+            if (force_cols && (bx0 < -0.5f || bx1 > (REAL)w_px + 0.5f)) oob = true;
+            if (force_rows && (by0 < -0.5f || by1 > (REAL)h_px + 0.5f)) oob = true;
+            if (oob) {
+                ++clipped;
+                if (clipped <= 8)
+                    DebugLog(L"  越界跳过: x=%.1f y=%.1f (列%d 行%d) 文字框=[%.1f,%.1f]x[%.1f,%.1f]",
+                             x, y, ix, iy, bx0, bx1, by0, by1);
+                continue;
+            }
             // 平移量里带上 pad，绘制点就回到单元原点，等价于「先平移再绕原点旋转」
-            g.TranslateTransform(x + (REAL)pad, y + (REAL)pad);
+            g.TranslateTransform(tx2, ty2);
             g.RotateTransform(ang);
             g.DrawString(text.c_str(), -1, &font, PointF(0.0f, 0.0f), &fmt, &brush);
             g.ResetTransform();
+            ++drawn;
+            // 前几个单元把坐标打出来：验证「正好 cols 列 rows 行」和间距时，
+            // 数截图容易看错，坐标是硬证据
+            if (drawn <= 16)
+                DebugLog(L"  单元#%lld: x=%.1f y=%.1f (列%d 行%d) 画在=%.1f,%.1f", drawn, x, y, ix, iy,
+                         tx2, ty2);
         }
     }
+    DebugLog(L"网格: 实际绘制单元=%lld 越界跳过=%lld", drawn, clipped);
 }
 
 // 建好字体后把整屏水印画到给定 Graphics 上；两条渲染路径共用

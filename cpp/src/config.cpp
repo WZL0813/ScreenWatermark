@@ -355,6 +355,7 @@ std::wstring SerializeValue(const JValue& v) {
 const wchar_t* const kKnownKeys[] = {
     L"text",       L"font_family",     L"font_size",  L"bold",        L"italic",
     L"color",      L"opacity",         L"angle",      L"gap_x",       L"gap_y",
+    L"cols",       L"rows",
     L"line_spacing", L"enabled",       L"click_through", L"template", L"time_format",
     L"refresh_seconds", L"all_monitors", L"phase_offset", L"autostart", L"hotkeys"};
 
@@ -406,6 +407,11 @@ void ClampConfig(Config& c) {
     if (c.gap_x > 2000) c.gap_x = 2000;
     if (c.gap_y < 0) c.gap_y = 0;
     if (c.gap_y > 2000) c.gap_y = 2000;
+    // 0 = 自动；上限 200 防止有人手写 1e9 把平铺算爆
+    if (c.cols < 0) c.cols = 0;
+    if (c.cols > 200) c.cols = 200;
+    if (c.rows < 0) c.rows = 0;
+    if (c.rows > 200) c.rows = 200;
     if (c.line_spacing < 0.5) c.line_spacing = 0.5;
     if (c.line_spacing > 3.0) c.line_spacing = 3.0;
     if (c.refresh_seconds < 5) c.refresh_seconds = 5;
@@ -494,6 +500,9 @@ Config LoadConfig(const std::wstring& path) {
     c.angle = GetInt(o, L"angle", c.angle);
     c.gap_x = GetInt(o, L"gap_x", c.gap_x);
     c.gap_y = GetInt(o, L"gap_y", c.gap_y);
+    // 缺字段时保持默认 0 = 自动，老配置行为完全不变
+    c.cols = GetInt(o, L"cols", c.cols);
+    c.rows = GetInt(o, L"rows", c.rows);
     c.line_spacing = GetDouble(o, L"line_spacing", c.line_spacing);
     c.enabled = GetBool(o, L"enabled", c.enabled);
     c.click_through = GetBool(o, L"click_through", c.click_through);
@@ -544,6 +553,8 @@ bool SaveConfig(const std::wstring& path, const Config& c) {
     kv(L"angle", NumToStr(cc.angle));
     kv(L"gap_x", NumToStr(cc.gap_x));
     kv(L"gap_y", NumToStr(cc.gap_y));
+    kv(L"cols", NumToStr(cc.cols));
+    kv(L"rows", NumToStr(cc.rows));
     kv(L"line_spacing", NumToStr(cc.line_spacing));
     kv(L"enabled", cc.enabled ? L"true" : L"false");
     kv(L"click_through", cc.click_through ? L"true" : L"false");
