@@ -356,7 +356,8 @@ const wchar_t* const kKnownKeys[] = {
     L"text",       L"font_family",     L"font_size",  L"bold",        L"italic",
     L"color",      L"opacity",         L"angle",      L"gap_x",       L"gap_y",
     L"cols",       L"rows",
-    L"line_spacing", L"enabled",       L"click_through", L"template", L"time_format",
+    L"line_spacing", L"image", L"image_scale", L"enabled", L"click_through", L"template",
+    L"time_format",
     L"refresh_seconds", L"all_monitors", L"phase_offset", L"autostart", L"hotkeys"};
 
 // hotkeys 对象里的三个键名，顺序必须和 Config::hotkeys / HotkeyAction 一致
@@ -414,6 +415,10 @@ void ClampConfig(Config& c) {
     if (c.rows > 200) c.rows = 200;
     if (c.line_spacing < 0.5) c.line_spacing = 0.5;
     if (c.line_spacing > 3.0) c.line_spacing = 3.0;
+    // 图片缩放倍数夹在 0.05..20；NaN 也顺手挡掉，否则后面算像素尺寸会出垃圾值
+    if (!(c.image_scale >= 0.0)) c.image_scale = 1.0;
+    if (c.image_scale < 0.05) c.image_scale = 0.05;
+    if (c.image_scale > 20.0) c.image_scale = 20.0;
     if (c.refresh_seconds < 5) c.refresh_seconds = 5;
     if (c.refresh_seconds > 3600) c.refresh_seconds = 3600;
     if (c.font_family.empty()) c.font_family = L"Microsoft YaHei";
@@ -504,6 +509,9 @@ Config LoadConfig(const std::wstring& path) {
     c.cols = GetInt(o, L"cols", c.cols);
     c.rows = GetInt(o, L"rows", c.rows);
     c.line_spacing = GetDouble(o, L"line_spacing", c.line_spacing);
+    // 缺字段时保持空路径 = 不用图片水印，老配置行为完全不变
+    c.image = GetStr(o, L"image", c.image);
+    c.image_scale = GetDouble(o, L"image_scale", c.image_scale);
     c.enabled = GetBool(o, L"enabled", c.enabled);
     c.click_through = GetBool(o, L"click_through", c.click_through);
     c.templ = GetBool(o, L"template", c.templ);
@@ -556,6 +564,8 @@ bool SaveConfig(const std::wstring& path, const Config& c) {
     kv(L"cols", NumToStr(cc.cols));
     kv(L"rows", NumToStr(cc.rows));
     kv(L"line_spacing", NumToStr(cc.line_spacing));
+    kv(L"image", L"\"" + EscapeJson(cc.image) + L"\"");
+    kv(L"image_scale", NumToStr(cc.image_scale));
     kv(L"enabled", cc.enabled ? L"true" : L"false");
     kv(L"click_through", cc.click_through ? L"true" : L"false");
     kv(L"template", cc.templ ? L"true" : L"false");

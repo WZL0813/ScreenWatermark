@@ -30,6 +30,9 @@ run-status.json
 # 自测用的全屏截图会带上真实桌面，不进版本库
 docs/shots/*-verify.png
 
+# 测试跑出来的产物（截图、临时配置）不进仓库
+cpp/tests/out/
+
 # ---- 编辑器 / 系统 ----
 .vscode/
 .idea/

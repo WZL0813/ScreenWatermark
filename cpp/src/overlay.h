@@ -6,6 +6,8 @@
 
 #include <gdiplus.h>
 
+#include <functional>
+#include <memory>
 #include <vector>
 
 #include "config.h"
@@ -45,10 +47,28 @@ private:
     bool EnsureWindows(const std::vector<MonitorRect>& want);
     void DestroyWindows();
     void RenderTo(const Win& w);
-    // §6 的平铺算法：算单元 + 逐格旋转绘制
-    void RenderCells(Gdiplus::Graphics& g, Gdiplus::Font& font, int w_px, int h_px,
-                     const std::wstring& text);
-    // 建字体 + 调 RenderCells，两条位图路径共用
+    // 一个「平铺单元」里画什么：多行文字，或者一张图片。
+    // 平铺 / 旋转 / 透明度 / gap / cols·rows / 夹取全都共用同一套逻辑，只有这里不同
+    struct Unit {
+        Gdiplus::REAL w = 0.0f;  // 实测单元尺寸（不含 gap）
+        Gdiplus::REAL h = 0.0f;
+        bool ok = false;
+        // 文字单元：逐行画。每行的画布 y 已经在 text_dy 里算好
+        std::vector<std::wstring> lines;
+        std::vector<Gdiplus::REAL> text_dy;
+        Gdiplus::Font* font = nullptr;  // 借用，由 DrawWatermark 持有
+        Gdiplus::REAL line_step = 0.0f;
+        Gdiplus::Color color;
+        // 图片单元：已经缩放好、并且烘进整体透明度的位图
+        Gdiplus::Bitmap* img = nullptr;
+    };
+    // 测多行文字盒（最宽行 + 行数 × 行高 × line_spacing）并建好逐行绘制回调
+    Unit MakeTextUnit(Gdiplus::Graphics& g, Gdiplus::Font& font, const std::wstring& text);
+    // 按 cfg_.image / cfg_.image_scale 加载并缩放图片；失败返回 ok=false 并写日志
+    Unit MakeImageUnit(Gdiplus::Graphics& g);
+    // 通用平铺循环：给定单元和绘制回调，按 §6 的规则铺满整屏
+    void TileUnit(Gdiplus::Graphics& g, const Unit& unit, int w_px, int h_px);
+    // 建字体 + 决定用图片还是文字 + 平铺；两条位图路径共用
     void DrawWatermark(Gdiplus::Graphics& g, int w_px, int h_px, UINT dpi);
     // 生成 w×h 的 32bpp top-down DIB，返回位图与像素指针（调用方负责 DeleteObject）
     bool MakeBackBuffer(int w, int h, HBITMAP& bmp, void** bits) const;
@@ -59,6 +79,14 @@ private:
     std::vector<MonitorRect> last_monitors_;
     // 非空 = 下一帧渲染完就写到这个路径（诊断用，正常运行时是空的）
     std::wstring dump_path_;
+    // 图片水印缓存：按「路径 + 修改时间 + 缩放倍数」判断要不要重读盘。
+    // 每帧都读盘太蠢（一次重绘可能铺几百个单元）
+    std::unique_ptr<Gdiplus::Bitmap> img_cache_;
+    std::wstring img_cache_path_;
+    long long img_cache_mtime_ = 0;
+    Gdiplus::REAL img_cache_scale_ = -1.0f;
+    // 上一次加载失败的路径，避免每帧刷同一条警告
+    std::wstring img_fail_path_;
 };
 
 // overlay 窗口的窗口过程，main.cpp 注册窗口类时用

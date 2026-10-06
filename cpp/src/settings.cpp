@@ -54,6 +54,11 @@ enum : int {
     IDC_HK_STATUS,
     IDC_COLS,
     IDC_ROWS,
+    // 图片水印：路径显示（只读）+ 选择 + 清除 + 缩放
+    IDC_IMAGE,
+    IDC_IMAGE_PICK,
+    IDC_IMAGE_CLEAR,
+    IDC_IMAGESCALE,
     IDC_ABOUT,
     IDC_TIMER_TICK = 2001,
     IDC_TIMER_RECORD = 2002,
@@ -62,7 +67,9 @@ enum : int {
 // 面板固定尺寸，坐标按 96 DPI 设计，运行时按 dpi/96 缩放。
 // 每加一行控件都要同步加高度，否则底部那几行会被裁掉（之前吃过这个亏）
 const int kClientW = 520;
-const int kClientH = 664;
+const int kClientH = 712;
+// 多行水印文本框：给到大约 3~4 行文字的高度
+const int kTextEditH = 76;
 const int kMarginX = 14;
 const int kEditH = 24;
 const int kRowH = 30;
@@ -129,6 +136,7 @@ bool SameRenderConfig(const Config& a, const Config& b) {
            a.bold == b.bold && a.italic == b.italic && a.color == b.color &&
            std::fabs(a.opacity - b.opacity) < 1e-6 && a.angle == b.angle &&
            a.gap_x == b.gap_x && a.gap_y == b.gap_y && a.cols == b.cols && a.rows == b.rows &&
+           a.image == b.image && std::fabs(a.image_scale - b.image_scale) < 1e-6 &&
            std::fabs(a.line_spacing - b.line_spacing) < 1e-6 && a.enabled == b.enabled &&
            a.click_through == b.click_through && a.templ == b.templ &&
            a.time_format == b.time_format && a.refresh_seconds == b.refresh_seconds &&
@@ -256,10 +264,16 @@ void Settings::BuildControls(HWND host) {
     const int eh = px(kEditH);
     int y = px(14);
 
-    // 1. 水印文本（占满剩余宽度）
+    // 1. 水印文本：多行。回车换行，空行也保留（渲染时按 '\n' 断行）
     S(0, L"STATIC", L"水印文本", SS_LEFT, px(kMarginX), y + px(5), label_w, px(18));
-    S(IDC_TEXT, L"EDIT", L"", ES_AUTOHSCROLL | WS_BORDER, col2, y, right - col2, eh);
-    y += step;
+    {
+        int th = px(kTextEditH);
+        S(IDC_TEXT, L"EDIT", L"",
+          ES_MULTILINE | ES_AUTOVSCROLL | ES_WANTRETURN | WS_VSCROLL | WS_BORDER, col2, y,
+          right - col2, th);
+        // 多行框里回车要换行而不是触发默认按钮，上面 ES_WANTRETURN 已经保证
+        y += th + px(8);
+    }
 
     // 7. 字体名（下拉可输入）+ 2. 字体大小
     S(0, L"STATIC", L"字体名", SS_LEFT, px(kMarginX), y + px(5), label_w, px(18));
@@ -323,6 +337,26 @@ void Settings::BuildControls(HWND host) {
           y + px(5), right - (l2 + label_w + num_w + px(14)), px(18));
     }
     y += step;
+
+    // 5c. 图片水印：路径（只读显示）+ 选择… + 清除 + 缩放。
+    // 路径非空且能加载时用图片平铺，忽略文本
+    {
+        int num_w = px(64);
+        int bw = text_w(L"选择…") + px(24);
+        int cw = text_w(L"清除") + px(24);
+        S(0, L"STATIC", L"水印图片", SS_LEFT, px(kMarginX), y + px(5), label_w, px(18));
+        int pick_x = right - bw - cw - px(8);
+        S(IDC_IMAGE, L"EDIT", L"", ES_AUTOHSCROLL | ES_READONLY | WS_BORDER, col2, y,
+          pick_x - px(8) - col2, eh);
+        S(IDC_IMAGE_PICK, L"BUTTON", L"选择…", BS_PUSHBUTTON, pick_x, y, bw, eh);
+        S(IDC_IMAGE_CLEAR, L"BUTTON", L"清除", BS_PUSHBUTTON, right - cw, y, cw, eh);
+        int sy = y + eh + px(6);
+        S(0, L"STATIC", L"缩放", SS_LEFT, px(kMarginX), sy + px(5), label_w, px(18));
+        S(IDC_IMAGESCALE, L"EDIT", L"1.00", ES_RIGHT | WS_BORDER, col2, sy, num_w, eh);
+        S(0, L"STATIC", L"1.00 = 原始像素大小（0.05 ~ 20）", SS_LEFT, col2 + num_w + px(14),
+          sy + px(5), right - (col2 + num_w + px(14)), px(18));
+        y = sy + step;
+    }
 
     // 6. 文字颜色
     S(0, L"STATIC", L"文字颜色", SS_LEFT, px(kMarginX), y + px(5), label_w, px(18));
@@ -524,18 +558,44 @@ std::wstring Settings::ReadText(int id) const {
     return TrimW(s);
 }
 
+// 多行文本专用：不能 Trim（会把用户特意留的首尾空行吃掉），只把 \r\n 归一成 \n
+std::wstring Settings::ReadTextMultiline(int id) const {
+    HWND c = DlgItem(hwnd_, id);
+    if (!c) return std::wstring();
+    int n = ::GetWindowTextLengthW(c);
+    std::wstring s((size_t)n + 1, L'\0');
+    ::GetWindowTextW(c, &s[0], n + 1);
+    s.resize((size_t)n);
+    std::wstring t;
+    t.reserve(s.size());
+    for (size_t i = 0; i < s.size(); ++i) {
+        if (s[i] == L'\r') {
+            if (i + 1 < s.size() && s[i + 1] == L'\n') continue;  // 丢掉 \r，保留 \n
+            t.push_back(L'\n');                                   // 单独的 \r 也当换行
+        } else {
+            t.push_back(s[i]);
+        }
+    }
+    return t;
+}
+
 void Settings::SetIntText(int id, int v) {
     ::SetDlgItemTextW(hwnd_, id, std::to_wstring(v).c_str());
 }
 
 void Settings::Collect(Config& out) const {
     out = cfg_;
-    out.text = ReadText(IDC_TEXT);
+    // 多行文本框：用不 Trim 的读法，首尾空行是用户有意留的
+    out.text = ReadTextMultiline(IDC_TEXT);
     out.font_size = ReadInt(IDC_FONTSIZE, cfg_.font_size, 8, 400);
     out.gap_x = ReadInt(IDC_GAPX, cfg_.gap_x, 0, 2000);
     out.gap_y = ReadInt(IDC_GAPY, cfg_.gap_y, 0, 2000);
     out.cols = ReadInt(IDC_COLS, cfg_.cols, 0, 200);
     out.rows = ReadInt(IDC_ROWS, cfg_.rows, 0, 200);
+    // 图片：路径 + 缩放；缩放越界由 ClampConfig 兜。
+    // 文本里的 \r\n 归一成 \n 在下面 text 那一段处理
+    out.image = ReadText(IDC_IMAGE);
+    out.image_scale = ReadDouble(IDC_IMAGESCALE, cfg_.image_scale, 0.05, 20.0);
     out.line_spacing = ReadDouble(IDC_LINESPACING, cfg_.line_spacing, 0.5, 3.0);
     out.bold = ReadCheck(IDC_BOLD);
     out.italic = ReadCheck(IDC_ITALIC);
@@ -599,6 +659,13 @@ void Settings::SyncFrom(const Config& cfg) {
     SetIntText(IDC_GAPY, cfg.gap_y);
     SetIntText(IDC_COLS, cfg.cols);
     SetIntText(IDC_ROWS, cfg.rows);
+    // 图片路径框是只读的，直接塞显示文本；缩放按两位小数显示
+    ::SetDlgItemTextW(hwnd_, IDC_IMAGE, cfg.image.c_str());
+    {
+        wchar_t sc[32];
+        swprintf(sc, 32, L"%.2f", cfg.image_scale);
+        ::SetDlgItemTextW(hwnd_, IDC_IMAGESCALE, sc);
+    }
     ::SetDlgItemTextW(hwnd_, IDC_TIMEFMT, cfg.time_format.c_str());
     ::SendMessageW(DlgItem(hwnd_, IDC_BOLD), BM_SETCHECK, cfg.bold ? BST_CHECKED : BST_UNCHECKED, 0);
     ::SendMessageW(DlgItem(hwnd_, IDC_ITALIC), BM_SETCHECK, cfg.italic ? BST_CHECKED : BST_UNCHECKED,
@@ -803,6 +870,8 @@ bool Settings::DumpControlAudit(const std::wstring& path, std::wstring* text_out
         {IDC_GAPY, L"垂直间距", L"gap_y"},
         {IDC_COLS, L"每行个数(0=自动)", L"cols"},
         {IDC_ROWS, L"每列个数(0=自动)", L"rows"},
+        {IDC_IMAGE, L"水印图片路径", L"image"},
+        {IDC_IMAGESCALE, L"图片缩放", L"image_scale"},
         {IDC_LINESPACING, L"行距倍数", L"line_spacing"},
         {IDC_COLOR_PREVIEW, L"颜色色块", L"color"},
         {IDC_TEMPLATE, L"启用模板变量", L"template"},
@@ -849,6 +918,8 @@ bool Settings::DumpControlAudit(const std::wstring& path, std::wstring* text_out
         else if (r.id == IDC_GAPY) val = std::to_wstring(got.gap_y);
         else if (r.id == IDC_COLS) val = std::to_wstring(got.cols);
         else if (r.id == IDC_ROWS) val = std::to_wstring(got.rows);
+        else if (r.id == IDC_IMAGE) val = got.image.empty() ? L"(空)" : got.image;
+        else if (r.id == IDC_IMAGESCALE) val = Fmt(L"%.2f", got.image_scale);
         else if (r.id == IDC_LINESPACING) val = Fmt(L"%.2f", got.line_spacing);
         else if (r.id == IDC_COLOR_PREVIEW) val = got.color;
         else if (r.id == IDC_TEMPLATE) val = got.templ ? L"true" : L"false";
@@ -1003,6 +1074,40 @@ LRESULT Settings::PanelProc(HWND h, UINT m, WPARAM w, LPARAM l) {
                 dirty_ = true;
                 ::SetDlgItemTextW(h, IDC_STATUS, L"已应用（未保存）");
                 if (on_apply) on_apply(cfg_);
+                return 0;
+            }
+            // 选择图片：GetOpenFileNameW + 常见图片滤波器
+            if (id == IDC_IMAGE_PICK && code == BN_CLICKED) {
+                wchar_t file[MAX_PATH] = {0};
+                OPENFILENAMEW ofn{};
+                ofn.lStructSize = sizeof(ofn);
+                ofn.hwndOwner = h;
+                ofn.lpstrFilter =
+                    L"图片 (*.png;*.jpg;*.jpeg;*.bmp;*.gif)\0*.png;*.jpg;*.jpeg;*.bmp;*.gif\0"
+                    L"所有文件 (*.*)\0*.*\0";
+                ofn.lpstrFile = file;
+                ofn.nMaxFile = MAX_PATH;
+                ofn.lpstrTitle = L"选择水印图片";
+                ofn.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_EXPLORER;
+                if (::GetOpenFileNameW(&ofn)) {
+                    cfg_.image = file;
+                    ::SetDlgItemTextW(h, IDC_IMAGE, file);
+                    dirty_ = true;
+                    ::SetDlgItemTextW(h, IDC_STATUS, L"图片已选择（未保存）");
+                    if (on_apply) on_apply(cfg_);
+                }
+                return 0;
+            }
+            if (id == IDC_IMAGE_CLEAR && code == BN_CLICKED) {
+                cfg_.image.clear();
+                ::SetDlgItemTextW(h, IDC_IMAGE, L"");
+                dirty_ = true;
+                ::SetDlgItemTextW(h, IDC_STATUS, L"已清除图片，回到文字水印（未保存）");
+                if (on_apply) on_apply(cfg_);
+                return 0;
+            }
+            if (id == IDC_IMAGESCALE && code == EN_CHANGE) {
+                if (!suppress_) ::SetDlgItemTextW(h, IDC_STATUS, L"未保存");
                 return 0;
             }
             if (id == IDC_HIDE && code == BN_CLICKED) {

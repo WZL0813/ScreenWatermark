@@ -69,6 +69,8 @@ private:
     double ReadDouble(int id, double def, double lo, double hi) const;
     bool ReadCheck(int id) const;
     std::wstring ReadText(int id) const;
+    // 多行文本用：不 Trim（保留首尾空行），并把 \r\n 归一成 \n
+    std::wstring ReadTextMultiline(int id) const;
     void SetIntText(int id, int v);
     void LoadFontList();
     void ApplyDpiFont(UINT dpi);

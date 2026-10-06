@@ -26,7 +26,10 @@ struct Config {
     // >0 时：cell_w = 屏宽 / cols、cell_h = 屏高 / rows，正好画 cols 列 rows 行
     int cols = 0;                     // 0..200
     int rows = 0;                     // 0..200
-    double line_spacing = 1.2;        // 0.5..3.0
+    double line_spacing = 1.2;        // 0.5..3.0，多行文本的行距倍数
+    // 图片水印：路径非空且能加载时用图片平铺（忽略 text）；加载失败自动退回文字并写日志
+    std::wstring image;               // 空 = 不用图片（默认）
+    double image_scale = 1.0;         // 0.05..20，1.0 = 原始像素大小
     bool enabled = true;
     bool click_through = true;
     bool templ = false;               // JSON 字段名是 template，C++ 关键字躲开
